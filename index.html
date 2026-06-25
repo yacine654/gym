@@ -81,6 +81,15 @@
   .notif-msg { font-size:12.5px; color:var(--text-soft); margin-top:8px; line-height:1.5; }
   .enable-btn { width:100%; margin-top:10px; background:var(--surface-alt); border:1px solid var(--border); color:var(--text); padding:9px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; }
   @media (max-width:560px) { .stats-grid { grid-template-columns:repeat(2,1fr); } }
+  .confirm-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:60; padding:20px; }
+  .confirm-box { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:24px 20px; width:100%; max-width:320px; text-align:center; }
+  .confirm-box .confirm-icon { font-size:36px; margin-bottom:10px; }
+  .confirm-box h3 { font-family:inherit; font-size:16px; margin:0 0 6px; }
+  .confirm-box p { font-size:13.5px; color:var(--text-soft); margin:0 0 20px; line-height:1.5; }
+  .confirm-btns { display:flex; gap:10px; }
+  .confirm-btns button { flex:1; padding:12px; border-radius:12px; font-weight:700; font-size:14px; border:none; cursor:pointer; }
+  .btn-cancel { background:var(--surface-alt); color:var(--text); border:1px solid var(--border) !important; }
+  .btn-danger { background:var(--danger); color:#fff; }
 </style>
 </head>
 <body>
@@ -150,6 +159,7 @@ let state = {
   showForm: false,
   showNotif: false,
   notifMsg: "",
+  confirmDelete: null,
   form: { name:"", planType:"monthly", plan:"3", customDays:"", joinDate: todayStr() },
 };
 
@@ -190,6 +200,9 @@ function addMember(){
       expiration,
     };
   }
+  // Remove existing member with the same name (case-insensitive) before adding
+  const nameNorm = f.name.trim().toLowerCase();
+  state.members = state.members.filter(m => m.name.toLowerCase() !== nameNorm);
   state.members.unshift({
     id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
     name: f.name.trim(),
@@ -199,7 +212,8 @@ function addMember(){
   saveMembers();
   state.form = { name:"", planType:"monthly", plan:"3", customDays:"", joinDate: todayStr() };
   state.showForm = false;
-  render();
+  if(history.state && history.state.modal) history.back();
+  else render();
 }
 function renewMember(id){
   const m = state.members.find(x=>x.id===id);
@@ -211,10 +225,21 @@ function renewMember(id){
   if(next){ m.expiration = next; saveMembers(); render(); }
 }
 function deleteMember(id){
-  if(!confirm("هل تريد حذف هذا العضو نهائيًا؟")) return;
+  state.confirmDelete = id;
+  history.pushState({modal:'confirm'}, '');
+  render();
+}
+function confirmDeleteNow(){
+  const id = state.confirmDelete;
+  state.confirmDelete = null;
   state.members = state.members.filter(m=>m.id!==id);
   saveMembers();
   render();
+}
+function cancelDelete(){
+  state.confirmDelete = null;
+  if(history.state && history.state.modal) history.back();
+  else render();
 }
 async function enableNotifications(){
   if(!("Notification" in window)){ state.notifMsg = "الإشعارات غير مدعومة في هذا المتصفح"; render(); return; }
@@ -389,6 +414,23 @@ function render(){
       </div>
     </div>`;
 
+  const confirmModalHtml = !state.confirmDelete ? "" : (()=>{
+    const m = state.members.find(x=>x.id===state.confirmDelete);
+    const name = m ? esc(m.name) : "";
+    return `
+    <div class="confirm-overlay" id="confirmOverlay">
+      <div class="confirm-box">
+        <div class="confirm-icon">🗑️</div>
+        <h3>حذف العضو</h3>
+        <p>هل تريد حذف <strong>${name}</strong> نهائيًا؟<br/>لا يمكن التراجع عن هذا الإجراء.</p>
+        <div class="confirm-btns">
+          <button class="btn-cancel" id="cancelDeleteBtn">إلغاء</button>
+          <button class="btn-danger" id="confirmDeleteBtn">حذف</button>
+        </div>
+      </div>
+    </div>`;
+  })();
+
   document.getElementById("root").innerHTML = `
     <div class="wrap">
       <div class="header">
@@ -424,20 +466,34 @@ function render(){
     ${formModalHtml}
   `;
 
+  // Render confirm modal outside #root so it layers on top
+  let confirmEl = document.getElementById("confirmPortal");
+  if(!confirmEl){ confirmEl = document.createElement("div"); confirmEl.id="confirmPortal"; document.body.appendChild(confirmEl); }
+  confirmEl.innerHTML = confirmModalHtml;
+
   attachEvents();
 }
 
 function attachEvents(){
   const root = document.getElementById("root");
 
-  root.querySelector("#bellBtn")?.addEventListener("click", ()=>{ state.showNotif=!state.showNotif; render(); });
+  root.querySelector("#bellBtn")?.addEventListener("click", ()=>{
+    if(!state.showNotif){ state.showNotif=true; history.pushState({modal:'notif'}, ''); }
+    else { state.showNotif=false; if(history.state&&history.state.modal) history.back(); else render(); return; }
+    render();
+  });
   root.querySelector("#enableNotifBtn")?.addEventListener("click", enableNotifications);
   root.querySelector("#searchInput")?.addEventListener("input", e=>{ state.query=e.target.value; render(); restoreFocus("#searchInput"); });
-  root.querySelector("#openForm")?.addEventListener("click", ()=>{ state.showForm=true; render(); });
-  root.querySelector("#overlay")?.addEventListener("click", (e)=>{ if(e.target.id==="overlay"){ state.showForm=false; render(); } });
-  root.querySelector("#closeForm")?.addEventListener("click", ()=>{ state.showForm=false; render(); });
+  root.querySelector("#openForm")?.addEventListener("click", ()=>{ state.showForm=true; history.pushState({modal:'form'}, ''); render(); });
+  root.querySelector("#overlay")?.addEventListener("click", (e)=>{ if(e.target.id==="overlay"){ state.showForm=false; if(history.state&&history.state.modal) history.back(); else render(); } });
+  root.querySelector("#closeForm")?.addEventListener("click", ()=>{ state.showForm=false; if(history.state&&history.state.modal) history.back(); else render(); });
   root.querySelector("#nameInput")?.addEventListener("input", e=>{ state.form.name=e.target.value; });
   root.querySelector("#saveBtn")?.addEventListener("click", addMember);
+
+  // confirm delete modal (rendered outside root)
+  document.getElementById("cancelDeleteBtn")?.addEventListener("click", cancelDelete);
+  document.getElementById("confirmDeleteBtn")?.addEventListener("click", confirmDeleteNow);
+  document.getElementById("confirmOverlay")?.addEventListener("click", e=>{ if(e.target.id==="confirmOverlay") cancelDelete(); });
 
   root.querySelectorAll("[data-filter]").forEach(el=>el.addEventListener("click", ()=>{ state.filter=el.dataset.filter; render(); }));
   root.querySelectorAll("[data-plan]").forEach(el=>el.addEventListener("click", ()=>{ state.form.plan=el.dataset.plan; render(); }));
@@ -504,6 +560,14 @@ if("serviceWorker" in navigator){
     navigator.serviceWorker.register("service-worker.js").catch(()=>{});
   });
 }
+
+// ---------- زر الرجوع (Android/iOS) ----------
+window.addEventListener("popstate", ()=>{
+  if(state.showForm){ state.showForm=false; }
+  else if(state.showNotif){ state.showNotif=false; }
+  else if(state.confirmDelete){ state.confirmDelete=null; }
+  render();
+});
 
 loadMembers();
 render();
