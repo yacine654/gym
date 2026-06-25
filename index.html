@@ -10,6 +10,8 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin:0; overscroll-behavior-y:contain; touch-action:pan-x pan-y; }
+  * { -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  input, textarea { -webkit-user-select:text; -moz-user-select:text; -ms-user-select:text; user-select:text; }
   body {
     --bg:#000000; --surface:#141414; --surface-alt:#1F1F1F; --border:#3A3A3A;
     --text:#FFFFFF; --text-soft:#A0A0A0; --accent:#FFFFFF; --accent-soft:rgba(255,255,255,0.15);
@@ -487,6 +489,14 @@ document.addEventListener("touchmove", e=>{
   const scrollY = window.scrollY || document.documentElement.scrollTop;
   if(scrollY <= 0 && touchY > __touchStartY) e.preventDefault();
 }, {passive:false});
+
+// ---------- منع تحديد النص ----------
+document.addEventListener("selectstart", e=>{
+  if(!["INPUT","TEXTAREA"].includes(e.target.tagName)) e.preventDefault();
+});
+document.addEventListener("contextmenu", e=>{
+  if(!["INPUT","TEXTAREA"].includes(e.target.tagName)) e.preventDefault();
+});
 
 // ---------- تسجيل عامل الخدمة (للعمل دون اتصال) ----------
 if("serviceWorker" in navigator){
