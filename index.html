@@ -2,14 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#000000" />
 <title>إدارة النادي الرياضي</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <style>
   * { box-sizing: border-box; }
-  html, body { margin:0; }
+  html, body { margin:0; overscroll-behavior-y:contain; touch-action:pan-x pan-y; }
   body {
     --bg:#000000; --surface:#141414; --surface-alt:#1F1F1F; --border:#3A3A3A;
     --text:#FFFFFF; --text-soft:#A0A0A0; --accent:#FFFFFF; --accent-soft:rgba(255,255,255,0.15);
@@ -462,6 +462,31 @@ function restoreFocus(sel){
   const el = document.querySelector(sel);
   if(el){ el.focus(); const v=el.value; el.value=""; el.value=v; }
 }
+
+// ---------- منع التكبير بالقرص (Pinch-to-Zoom) ----------
+document.addEventListener("gesturestart", e=>e.preventDefault());
+document.addEventListener("gesturechange", e=>e.preventDefault());
+document.addEventListener("gestureend", e=>e.preventDefault());
+let __lastTouchEnd = 0;
+document.addEventListener("touchend", e=>{
+  const now = Date.now();
+  if(now - __lastTouchEnd <= 300) e.preventDefault(); // منع التكبير بالنقر المزدوج
+  __lastTouchEnd = now;
+}, {passive:false});
+document.addEventListener("touchmove", e=>{
+  if(e.touches.length > 1) e.preventDefault(); // منع التكبير بإصبعين
+}, {passive:false});
+
+// ---------- منع السحب للتحديث (Pull-to-Refresh) ----------
+let __touchStartY = 0;
+document.addEventListener("touchstart", e=>{
+  __touchStartY = e.touches[0].clientY;
+}, {passive:true});
+document.addEventListener("touchmove", e=>{
+  const touchY = e.touches[0].clientY;
+  const scrollY = window.scrollY || document.documentElement.scrollTop;
+  if(scrollY <= 0 && touchY > __touchStartY) e.preventDefault();
+}, {passive:false});
 
 // ---------- تسجيل عامل الخدمة (للعمل دون اتصال) ----------
 if("serviceWorker" in navigator){
